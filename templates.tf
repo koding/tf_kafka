@@ -1,7 +1,18 @@
 resource "template_file" "kafka_cloud_init_file" {
-  template = "${file("cloud_init/kafka.yaml")}"
+  template = "${file("data/kafka.yaml.tpl")}"
 
   vars = {
-    region           = "${var.region}"
+    kafka_install_script    = "${template_file.kafka_install.rendered}"
+    kafka_init_script       = "${file("data/kafka.init")}"
+    region                  = "${var.region}"
+  }
+}
+
+resource "template_file" "kafka_install" {
+  template = "${file("data/kafka_install.sh.tpl")}"
+
+  vars = {
+    SCALA_VERSION = "${var.scala_version}"
+    KAFKA_VERSION = "${var.kafka_version}"
   }
 }
