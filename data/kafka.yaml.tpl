@@ -17,12 +17,8 @@ write_files:
       ${kafka_init_script_b64}
 
 runcmd:
+ - groupadd -r kafka
+ - useradd -g kafka -M -r kafka
  - /tmp/install_kafka.sh
  - chkconfig --add kafka
  - service kafka start
-
-users:
-  - name: kafka
-    primary-group: kafka
-    lock_passwd: true
-    system: true
