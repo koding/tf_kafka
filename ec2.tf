@@ -15,6 +15,6 @@ resource "aws_instance" "kafka" {
   private_ip = "${element(split(",", var.private_ips), count.index)}"
 
   tags {
-    Name = "${format("zookeeper-%03d", count.index + 1)}"
+    Name = "${format("${var.name}-%03d", count.index + 1)}"
   }
 }
