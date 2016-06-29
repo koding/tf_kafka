@@ -2,7 +2,7 @@ resource "aws_instance" "kafka" {
   count         = "${length(split(",", var.private_ips))}"
   ami           = "${var.ami_id}"
   instance_type = "${var.aws_instance_type}"
-  key_name      = "${aws_key_pair.cihangir.key_name}"
+  key_name      = "${var.key_pair_name}"
 
   ebs_optimized = "${var.ebs_optimized}"
   subnet_id = "${var.aws_subnet_subnet_id}"
