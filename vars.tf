@@ -11,7 +11,7 @@ variable "aws_subnet_subnet_id" {
 }
 
 variable "aws_instance_type" {
-  default = "t2.micro"
+  default = "c3.xlarge"
 }
 
 variable "ami_id" {
