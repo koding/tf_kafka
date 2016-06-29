@@ -21,6 +21,16 @@ variable "ami_id" {
 
 variable "private_ips" {
   default = "10.0.0.121,10.0.0.122,10.0.0.123"
+variable "zookeeper_ips" {
+  default = "10.0.0.121"
+}
+
+variable "zookeeper_port" {
+  default = "2181"
+}
+
+variable "key_pair_name" {
+  default = "cihangir"
 }
 
 variable "vpc_security_group_ids" {
