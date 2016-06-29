@@ -10,6 +10,12 @@ write_files:
     content: |
       ${kafka_install_script_b64}
 
+  - path: /tmp/server.properties
+    permissions: "0755"
+    encoding: b64
+    content: |
+      ${kafka_server_properties_b64}
+
   - path: /etc/init.d/kafka
     permissions: "0755"
     encoding: b64
