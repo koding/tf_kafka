@@ -16,6 +16,12 @@ write_files:
     content: |
       ${kafka_init_script_b64}
 
+  - path: /etc/brokerid.sh
+    permissions: "0755"
+    encoding: b64
+    content: |
+      ${kafka_broker_id_generator_b64}
+
 runcmd:
  - groupadd -r kafka
  - useradd -g kafka -M -r kafka
