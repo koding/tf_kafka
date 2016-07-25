@@ -1,0 +1,142 @@
+box: nodesource/trusty:4.3.0
+validate:
+  steps:
+    - script:
+        name: install wget / curl / unzip
+        code: |
+          apt-get update
+          apt-get -y -qq install wget unzip curl
+    - capgemini/terraform-install:
+        version: "0.6.16"
+    - script:
+        name: run terraform validate
+        code: |
+          terraform validate
+
+plan:
+  steps:
+    - script:
+        name: install wget / curl / unzip
+        code: |
+          apt-get update
+          apt-get -y -qq install wget unzip curl
+    - script:
+        name: set ENV vars
+        code: |
+          export STATE_STOR_BUCKET=${STATE_STOR_BUCKET:-kodingdev-tf-state}
+          export STATE_STOR_BUCKET_REGION=${STATE_STOR_BUCKET_REGION:-us-east-1}
+          export STATE_STOR_KEY=${STATE_STOR_KEY:-$WERCKER_APPLICATION_NAME/terraform.state}
+          export STATE_STOR_OUT_KEY=${STATE_STOR_KEY:-$WERCKER_APPLICATION_NAME/terraform.out}
+          export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-$TF_VAR_access_key}
+          export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-$TF_VAR_secret_key}
+
+    - capgemini/terraform-install:
+        version: "0.6.16"
+    - script:
+        name: run terraform plan
+        code: |
+          mkdir -p $WERCKER_APPLICATION_NAME
+          terraform remote config -backend=s3 -backend-config="bucket=$STATE_STOR_BUCKET" -backend-config="key=$STATE_STOR_KEY" -backend-config="region=$STATE_STOR_BUCKET_REGION"
+          terraform plan -out $STATE_STOR_OUT_KEY
+
+apply:
+  steps:
+    - script:
+        name: install wget / curl / unzip
+        code: |
+          apt-get update
+          apt-get -y -qq install wget unzip curl
+    - script:
+        name: set ENV vars
+        code: |
+          export STATE_STOR_BUCKET=${STATE_STOR_BUCKET:-kodingdev-tf-state}
+          export STATE_STOR_BUCKET_REGION=${STATE_STOR_BUCKET_REGION:-us-east-1}
+          export STATE_STOR_KEY=${STATE_STOR_KEY:-$WERCKER_APPLICATION_NAME}
+          export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-$TF_VAR_access_key}
+          export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-$TF_VAR_secret_key}
+    - capgemini/terraform-install:
+        version: "0.6.16"
+    - script:
+        name: run terraform apply
+        code: |
+          mkdir -p $WERCKER_APPLICATION_NAME
+          terraform remote config -backend=s3 -backend-config="bucket=$STATE_STOR_BUCKET" -backend-config="key=$STATE_STOR_KEY" -backend-config="region=$STATE_STOR_BUCKET_REGION"
+          terraform apply $STATE_STOR_OUT_KEY
+
+destroy:
+  steps:
+    - script:
+        name: install wget / curl / unzip
+        code: |
+          apt-get update
+          apt-get -y -qq install wget unzip curl
+    - script:
+        name: set ENV vars
+        code: |
+          export STATE_STOR_BUCKET=${STATE_STOR_BUCKET:-kodingdev-tf-state}
+          export STATE_STOR_BUCKET_REGION=${STATE_STOR_BUCKET_REGION:-us-east-1}
+          export STATE_STOR_KEY=${STATE_STOR_KEY:-$WERCKER_APPLICATION_NAME}
+          export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-$TF_VAR_access_key}
+          export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-$TF_VAR_secret_key}
+    - capgemini/terraform-install:
+        version: "0.6.16"
+    - script:
+        name: run terraform destroy -force
+        code: |
+          mkdir -p $WERCKER_APPLICATION_NAME
+          terraform remote config -backend=s3 -backend-config="bucket=$STATE_STOR_BUCKET" -backend-config="key=$STATE_STOR_KEY" -backend-config="region=$STATE_STOR_BUCKET_REGION"
+          terraform destroy -force
+
+deploy:
+  steps:
+    - add-ssh-key:
+        keyname: DEPLOYMENT_KEY
+
+    - script:
+        name: install deps
+        code: |
+          apt-get update
+          apt-get install -y software-properties-common python-software-properties python-pip
+          apt-get install -y zip unzip
+
+    - script:
+        name: set ENV vars
+        code: |
+          export EB_APP_NAME=${EB_APP_NAME:-koding}
+          export EB_ENV_NAME=${EB_ENV_NAME:-koding-kafka}
+          export EB_ENV_REGION=${EB_ENV_REGION:-us-east-1}
+          export EB_S3_BUCKET_PREFIX=${EB_S3_BUCKET_PREFIX:-kodingdev-eb-deploy}
+
+          export STATE_STOR_BUCKET=${STATE_STOR_BUCKET:-kodingdev-tf-state}
+          export STATE_STOR_BUCKET_REGION=${STATE_STOR_BUCKET_REGION:-us-east-1}
+          export STATE_STOR_KEY=${STATE_STOR_KEY:-$WERCKER_APPLICATION_NAME}
+          export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-$TF_VAR_access_key}
+          export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-$TF_VAR_secret_key}
+
+    - script:
+        name: create version file
+        code: |
+          $WERCKER_ROOT/scripts/create_version.sh
+
+    - script:
+        name: create temporary tokens
+        code: |
+          echo $ROLLBAR_TOKEN > ROLLBAR_TOKEN
+          echo $PAPERTRAIL_PORT > PAPERTRAIL_PORT
+          echo $PAPERTRAIL_TOKEN > PAPERTRAIL_TOKEN
+
+    - script:
+        name: zip
+        code: |
+          cd $WERCKER_ROOT
+          zip -q --symlinks -r $(cat $WERCKER_ROOT/ARCHIVE_NAME) . || :
+
+    - koding/eb-deploy@0.31.0:
+        access-key: ${AWS_ACCESS_KEY_ID:-$TF_VAR_access_key}
+        secret-key: ${AWS_SECRET_ACCESS_KEY:-$TF_VAR_secret_key}
+        app-name: $EB_APP_NAME
+        env-name: $EB_ENV_NAME
+        version-label: $(cat $WERCKER_ROOT/ARCHIVE_NAME)
+        region: $EB_ENV_REGION
+        s3-bucket: $EB_S3_BUCKET_PREFIX-$EB_ENV_REGION
+        s3-key: $(cat $WERCKER_ROOT/ARCHIVE_NAME)
