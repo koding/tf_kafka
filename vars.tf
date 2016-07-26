@@ -43,7 +43,7 @@ variable "elb_subnet_ids" {
 }
 
 variable "healthCheckEndpoint" {
-  default = "HTTP:8181/exhibitor/v1"
+  default = "HTTP:80/"
 }
 
 variable "deployment_type" {
