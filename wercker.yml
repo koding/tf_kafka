@@ -128,8 +128,7 @@ deploy:
           echo $ROLLBAR_TOKEN > ROLLBAR_TOKEN
           echo $PAPERTRAIL_PORT > PAPERTRAIL_PORT
           echo $PAPERTRAIL_TOKEN > PAPERTRAIL_TOKEN
-
-          sed "s/localhost:2181/${TF_VAR_zk_hosts}/g" server.properties > server.properties
+          sed -i - "s/localhost:2181/${TF_VAR_zk_hosts}/g" "server.properties"
 
     - script:
         name: zip
