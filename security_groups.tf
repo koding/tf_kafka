@@ -80,3 +80,13 @@ resource "aws_security_group_rule" "eb_allow_all_egress" {
 #   cidr_blocks       = ["0.0.0.0/0"]
 #   security_group_id = "${aws_security_group.elb.id}"
 # }
+
+# Allow connections to ZK ELB
+resource "aws_security_group_rule" "zk_elb_ingress_allow_from_eb" {
+  type                     = "ingress"
+  from_port                = 2181
+  to_port                  = 2181
+  protocol                 = "TCP"
+  source_security_group_id = "${aws_security_group.eb.id}"
+  security_group_id        = "${var.zk_elb_sec_group_id}"
+}
