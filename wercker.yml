@@ -129,6 +129,8 @@ deploy:
           echo $PAPERTRAIL_PORT > PAPERTRAIL_PORT
           echo $PAPERTRAIL_TOKEN > PAPERTRAIL_TOKEN
 
+          sed "s/localhost:2181/${TF_VAR_zk_hosts}/g" server.properties > server.properties
+
     - script:
         name: zip
         code: |
