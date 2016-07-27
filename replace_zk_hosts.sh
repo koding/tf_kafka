@@ -2,4 +2,6 @@
 
 zk_hosts=`cat ZK_HOSTS`
 
-sed -i "s/localhost:2181/${zk_hosts}/g" "server.properties"
+echo "zookeeper.connect=$zk_hosts" >> server.properties
+
+echo "export ZK_HOSTS=$zk_hosts" >> /opt/ami-scripts/env/zookeeper.sh
