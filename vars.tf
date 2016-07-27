@@ -1,3 +1,5 @@
+variable "zk_hosts" { }
+
 variable "env_name" {
   default = "koding-kafka"
 }
