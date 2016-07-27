@@ -11,6 +11,7 @@ validate:
     - script:
         name: run terraform validate
         code: |
+          terraform get --update
           terraform validate
 
 plan:
@@ -37,6 +38,7 @@ plan:
         code: |
           mkdir -p $WERCKER_APPLICATION_NAME
           terraform remote config -backend=s3 -backend-config="bucket=$STATE_STOR_BUCKET" -backend-config="key=$STATE_STOR_KEY" -backend-config="region=$STATE_STOR_BUCKET_REGION"
+          terraform get --update
           terraform plan -out $STATE_STOR_OUT_KEY
 
 apply:
@@ -61,6 +63,7 @@ apply:
         code: |
           mkdir -p $WERCKER_APPLICATION_NAME
           terraform remote config -backend=s3 -backend-config="bucket=$STATE_STOR_BUCKET" -backend-config="key=$STATE_STOR_KEY" -backend-config="region=$STATE_STOR_BUCKET_REGION"
+          terraform get --update
           terraform apply $STATE_STOR_OUT_KEY
 
 destroy:
@@ -85,6 +88,7 @@ destroy:
         code: |
           mkdir -p $WERCKER_APPLICATION_NAME
           terraform remote config -backend=s3 -backend-config="bucket=$STATE_STOR_BUCKET" -backend-config="key=$STATE_STOR_KEY" -backend-config="region=$STATE_STOR_BUCKET_REGION"
+          terraform get --update
           terraform destroy -force
 
 deploy:
