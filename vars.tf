@@ -26,7 +26,7 @@ variable "s3_bucket_name" {
 }
 
 variable "ami_id" {
-  default = "ami-62e17475"
+  default = "ami-39990d2e"
 }
 
 variable "instance_type" {
