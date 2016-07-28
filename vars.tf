@@ -46,7 +46,7 @@ variable "elb_subnet_ids" {
 }
 
 variable "healthCheckEndpoint" {
-  default = "HTTP:80/"
+  default = "TCP:9092"
 }
 
 variable "deployment_type" {
