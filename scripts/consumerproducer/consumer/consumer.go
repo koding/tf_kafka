@@ -71,16 +71,12 @@ func consume(consumer sarama.PartitionConsumer, doneCh chan struct{}, wg *sync.W
 	msgCount = 0
 
 	for {
-
 		select {
 		case err := <-consumer.Errors():
 			fmt.Println(err)
 		case msg := <-consumer.Messages():
 			msgCount++
 			fmt.Println("Received messages", string(msg.Key), string(msg.Value))
-			// case <-signals:
-			// 	fmt.Println("Interrupt is detected")
-			// 	doneCh <- struct{}{}
 		case <-doneCh:
 			fmt.Println("DONE CHANNEL TRIGGERED")
 			return
