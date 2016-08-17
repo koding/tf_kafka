@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,10 @@ import (
 	"strconv"
 
 	"github.com/Shopify/sarama"
+)
+
+var (
+	interval = flag.Duration("interval", 1*time.Second, "default duration to generate strings")
 )
 
 func main() {
@@ -40,33 +45,34 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
-	var keyInt int
+	var enqueued, keyInt, errors int
 
-	var enqueued, errors int
 	doneCh := make(chan struct{})
 	go func() {
 		for {
 
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(*interval)
 
 			strTime := strconv.Itoa(int(time.Now().Unix()))
 			val := fmt.Sprintf("Something Cool: %d", keyInt)
+
 			msg := &sarama.ProducerMessage{
 				Topic: "important",
 				Key:   sarama.StringEncoder(strTime),
 				Value: sarama.StringEncoder(val),
 			}
-			keyInt++
+
 			select {
 			case producer.Input() <- msg:
 				enqueued++
-				fmt.Println("Produce message")
+				fmt.Println("Produce message:", keyInt)
 			case err := <-producer.Errors():
 				errors++
 				fmt.Println("Failed to produce message:", err)
 			case <-signals:
 				doneCh <- struct{}{}
 			}
+			keyInt++
 		}
 	}()
 
