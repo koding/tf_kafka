@@ -44,9 +44,6 @@ func main() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
-	// Count how many message processed
-	// msgCount := 0
-
 	// Get signnal for finish
 	doneCh := make(chan struct{})
 
@@ -60,7 +57,7 @@ func main() {
 		go consume(consumer, doneCh, &wg)
 	}
 
-	// <-doneCh
+	// we dont have to wait for <-doneCh channel
 	wg.Wait()
 
 	fmt.Println("Processed", msgCount, "messages")
@@ -68,7 +65,6 @@ func main() {
 
 func consume(consumer sarama.PartitionConsumer, doneCh chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
-	msgCount = 0
 
 	for {
 		select {
