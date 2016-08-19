@@ -6,16 +6,24 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
+	"strconv"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/Shopify/sarama"
+)
+
+const (
+	topic = "important"
 )
 
 // channel variables
 var (
-	done = make(chan bool)
-	msgs = make(chan string)
+	doneCh                       = make(chan bool)
+	done                         = make(chan bool)
+	msgs                         = make(chan string)
+	msgCount                     int
+	producedValue, consumedValue int
 )
 
 // holds the flag variables
@@ -29,120 +37,30 @@ var (
 var mu = &sync.Mutex{}
 
 func main() {
+	flag.Parse()
 
-}
-
-var (
-	producer, consumer int
-)
-
-func produce(x time.Duration, n int, c chan struct{}) {
-	defer func() {
-		close(msgs)
-		done <- true
-	}()
-
-	for i := 0; i < n; i++ {
-		select {
-		case <-c:
-			return
-		case <-time.After(x):
-			str := fmt.Sprintf("/key-%d", i)
-			msgs <- str
-			// we dont need to lock process coz there is single process
-			producer++
-		}
-	}
-}
-
-func consume(c *zk.Conn, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for {
-		msg, ok := <-msgs
-		if !ok {
-			return
-		}
-		_, err := c.Create(msg, nil, 0, zk.WorldACL(zk.PermAll))
-		if err != nil {
-			if err == zk.ErrNodeExists {
-				continue
-			}
-			fmt.Println(fmt.Errorf("%v", err.Error()))
-			return
-		}
-
-		if err == nil {
-			mu.Lock()
-			consumer++
-			mu.Unlock()
-		}
-	}
-}
-
-// cleanUp cleans the all znodes in zookeper data structure
-func cleanUp(c *zk.Conn) error {
-	children, _, _, err := c.ChildrenW("/")
-	if err != nil {
-		return err
+	if *goroutines > *element {
+		log.Fatal(fmt.Errorf("err: goroutines should be less than element number"))
 	}
 
-	for _, child := range children {
-		// we can't delete /zookeeper path from the znodes
-		if child == "zookeeper" {
-			continue
-		}
-		// delete operation takes path parameter
-		// then it should have '/' as first index
-		if err := c.Delete("/"+child, 0); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func handleCtrlC(c chan os.Signal, cc chan struct{}) {
-	// handle ctrl+c event here
-	<-c
-	close(cc)
-}
-
-
-
-
-import (
-	"fmt"
-	"log"
-	"os"
-	"os/signal"
-	"time"
-
-	"strconv"
-
-	"github.com/Shopify/sarama"
-)
-
-func producer()  {
-    // Setup configuration
+	// Setup configuration
 	config := sarama.NewConfig()
 	// Return specifies what channels will be populated.
 	// If they are set to true, you must read from
 	// config.Producer.Return.Successes = true
 	// The total number of times to retry sending a message (default 3).
 	config.Producer.Retry.Max = 5
+
 	// The level of acknowledgement reliability needed from the broker.
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	brokers := []string{"localhost:9092"}
 	producer, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
-		// Should not reach here
 		panic(err)
 	}
 
 	defer func() {
 		if err := producer.Close(); err != nil {
-			// Should not reach here
 			panic(err)
 		}
 	}()
@@ -150,23 +68,33 @@ func producer()  {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 
-	var enqueued, errors int
-	doneCh := make(chan struct{})
-	go func() {
-		for {
+	var errors int
 
-			time.Sleep(500 * time.Millisecond)
+	doneCh := make(chan struct{})
+
+	go func() {
+		defer func() {
+			time.Sleep(*interval / 2)
+			close(doneCh)
+		}()
+
+		for i := 0; i < *element; i++ {
+
+			time.Sleep(*interval)
 
 			strTime := strconv.Itoa(int(time.Now().Unix()))
+			val := fmt.Sprintf("Something Cool: %d", i)
+
 			msg := &sarama.ProducerMessage{
-				Topic: "important",
+				Topic: topic,
 				Key:   sarama.StringEncoder(strTime),
-				Value: sarama.StringEncoder("Something Cool"),
+				Value: sarama.StringEncoder(val),
 			}
+
 			select {
 			case producer.Input() <- msg:
-				enqueued++
-				fmt.Println("Produce message")
+				producedValue++
+				fmt.Println("Produce message:", i)
 			case err := <-producer.Errors():
 				errors++
 				fmt.Println("Failed to produce message:", err)
@@ -176,6 +104,71 @@ func producer()  {
 		}
 	}()
 
-	<-doneCh
-	log.Printf("Enqueued: %d; errors: %d\n", enqueued, errors)
+	// CONSUMER GOES HERE
+
+	config.Consumer.Return.Errors = true
+
+	// Create new consumer
+	master, err := sarama.NewConsumer(brokers, config)
+	if err != nil {
+		panic(err)
+	}
+	str, _ := master.Topics()
+	fmt.Println("MASTER CONSUMER IS :", str)
+	defer func() {
+		if err := master.Close(); err != nil {
+			panic(err)
+		}
+	}()
+
+	// How to decide partition, is it fixed value...?
+	consumer, err := master.ConsumePartition(topic, 0, sarama.OffsetNewest)
+	if err != nil {
+		panic(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(*goroutines)
+
+	// warn to return all goroutines when Interrupt signal triggered
+	go handleCtrlC(signals, doneCh)
+
+	for index := 0; index < *goroutines; index++ {
+		go consume(consumer, doneCh, &wg)
+	}
+
+	wg.Wait()
+	// <-doneCh
+	fmt.Println("Processed", msgCount, "messages")
+	fmt.Println("CONSUMED: %d and PRODUCED: %d", consumedValue, producedValue)
+}
+
+func consume(consumer sarama.PartitionConsumer, doneCh chan struct{}, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for {
+		select {
+		case err := <-consumer.Errors():
+			fmt.Println(err)
+		case msg := <-consumer.Messages():
+			msgCount++
+			fmt.Println("Received messages", string(msg.Key), string(msg.Value))
+			// use mutex here to prevent from race condition
+			mu.Lock()
+			consumedValue++
+			mu.Unlock()
+		case <-doneCh:
+			fmt.Println("DONE CHANNEL TRIGGERED")
+			return
+			// case <-time.After(*interval * 2):
+			// 	fmt.Println("TIME AFTER WORKS")
+			// 	return
+		}
+	}
+}
+
+func handleCtrlC(c chan os.Signal, cc chan struct{}) {
+	// handle ctrl+c event here
+	<-c
+	close(cc)
 }
