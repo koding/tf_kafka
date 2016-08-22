@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +21,6 @@ const (
 // channel variables
 var (
 	doneCh                       = make(chan bool)
-	done                         = make(chan bool)
 	msgs                         = make(chan string)
 	msgCount                     int
 	producedValue, consumedValue int
@@ -31,7 +31,7 @@ var (
 	element    = flag.Int("element", 10, "default znode number")
 	interval   = flag.Duration("interval", 1*time.Second, "default duration to generate strings")
 	goroutines = flag.Int("goroutines", 2, "default go routines count")
-	address    = flag.String("address", "0.0.0.0", "addresses for zookeeper")
+	address    = flag.String("address", "localhost:9092", "addresses for kafka")
 )
 
 var mu = &sync.Mutex{}
@@ -53,7 +53,8 @@ func main() {
 
 	// The level of acknowledgement reliability needed from the broker.
 	config.Producer.RequiredAcks = sarama.WaitForAll
-	brokers := []string{"localhost:9092"}
+	brokers := strings.Split(*address, ",")
+
 	producer, err := sarama.NewAsyncProducer(brokers, config)
 	if err != nil {
 		panic(err)
@@ -74,7 +75,7 @@ func main() {
 
 	go func() {
 		defer func() {
-			time.Sleep(*interval / 2)
+			time.Sleep(*interval / 10)
 			close(doneCh)
 		}()
 
@@ -138,7 +139,7 @@ func main() {
 	}
 
 	wg.Wait()
-	// <-doneCh
+
 	fmt.Println("Processed", msgCount, "messages")
 	fmt.Println("CONSUMED: %d and PRODUCED: %d", consumedValue, producedValue)
 }
@@ -160,9 +161,6 @@ func consume(consumer sarama.PartitionConsumer, doneCh chan struct{}, wg *sync.W
 		case <-doneCh:
 			fmt.Println("DONE CHANNEL TRIGGERED")
 			return
-			// case <-time.After(*interval * 2):
-			// 	fmt.Println("TIME AFTER WORKS")
-			// 	return
 		}
 	}
 }
