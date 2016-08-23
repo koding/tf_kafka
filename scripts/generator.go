@@ -95,7 +95,6 @@ func main() {
 			select {
 			case producer.Input() <- msg:
 				producedValue++
-				fmt.Println("Produce message:", i)
 			case err := <-producer.Errors():
 				errors++
 				fmt.Println("Failed to produce message:", err)
@@ -114,8 +113,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	str, _ := master.Topics()
-	fmt.Println("MASTER CONSUMER IS :", str)
+
 	defer func() {
 		if err := master.Close(); err != nil {
 			panic(err)
@@ -140,8 +138,13 @@ func main() {
 
 	wg.Wait()
 
-	fmt.Println("Processed", msgCount, "messages")
-	fmt.Println("CONSUMED: %d and PRODUCED: %d", consumedValue, producedValue)
+	if producedValue == consumedValue {
+		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is finihed as successfully", producedValue, consumedValue))
+	} else {
+		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is failed", producedValue, consumedValue))
+	}
+
+	os.Exit(0)
 }
 
 func consume(consumer sarama.PartitionConsumer, doneCh chan struct{}, wg *sync.WaitGroup) {
@@ -151,15 +154,13 @@ func consume(consumer sarama.PartitionConsumer, doneCh chan struct{}, wg *sync.W
 		select {
 		case err := <-consumer.Errors():
 			fmt.Println(err)
-		case msg := <-consumer.Messages():
+		case <-consumer.Messages():
 			msgCount++
-			fmt.Println("Received messages", string(msg.Key), string(msg.Value))
 			// use mutex here to prevent from race condition
 			mu.Lock()
 			consumedValue++
 			mu.Unlock()
 		case <-doneCh:
-			fmt.Println("DONE CHANNEL TRIGGERED")
 			return
 		}
 	}
