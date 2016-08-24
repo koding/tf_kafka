@@ -14,10 +14,6 @@ import (
 	"github.com/Shopify/sarama"
 )
 
-const (
-	topic = "important"
-)
-
 // channel variables
 var (
 	doneCh                       = make(chan bool)
@@ -28,17 +24,18 @@ var (
 
 // holds the flag variables
 var (
-	element    = flag.Int("element", 10, "default znode number")
+	element    = flag.Int("element", 10, "default message number")
 	interval   = flag.Duration("interval", 1*time.Second, "default duration to generate strings")
 	goroutines = flag.Int("goroutines", 2, "default go routines count")
 	address    = flag.String("address", "localhost:9092", "addresses for kafka")
+	topic      = flag.String("topic", "defaultTopic", "topic name for kafka")
 )
 
 var mu = &sync.Mutex{}
 
 func main() {
 	flag.Parse()
-
+	fmt.Println("TOPIC IS:", *topic)
 	if *goroutines > *element {
 		log.Fatal(fmt.Errorf("err: goroutines should be less than element number"))
 	}
@@ -87,7 +84,7 @@ func main() {
 			val := fmt.Sprintf("Something Cool: %d", i)
 
 			msg := &sarama.ProducerMessage{
-				Topic: topic,
+				Topic: *topic,
 				Key:   sarama.StringEncoder(strTime),
 				Value: sarama.StringEncoder(val),
 			}
@@ -121,7 +118,7 @@ func main() {
 	}()
 
 	// How to decide partition, is it fixed value...?
-	consumer, err := master.ConsumePartition(topic, 0, sarama.OffsetNewest)
+	consumer, err := master.ConsumePartition(*topic, 0, sarama.OffsetNewest)
 	if err != nil {
 		panic(err)
 	}
