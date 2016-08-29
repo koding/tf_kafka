@@ -35,7 +35,7 @@ var mu = &sync.Mutex{}
 
 func main() {
 	flag.Parse()
-	fmt.Println("TOPIC IS:", *topic)
+
 	if *goroutines > *element {
 		log.Fatal(fmt.Errorf("err: goroutines should be less than element number"))
 	}
