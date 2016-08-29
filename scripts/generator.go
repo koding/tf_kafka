@@ -75,10 +75,7 @@ func main() {
 			time.Sleep(*interval / 10)
 			close(doneCh)
 		}()
-
 		for i := 0; i < *element; i++ {
-
-			time.Sleep(*interval)
 
 			strTime := strconv.Itoa(int(time.Now().Unix()))
 			val := fmt.Sprintf("Something Cool: %d", i)
@@ -89,6 +86,9 @@ func main() {
 				Value: sarama.StringEncoder(val),
 			}
 
+			// use ticker as time.Sleep
+			<-time.Tick(*interval)
+
 			select {
 			case producer.Input() <- msg:
 				producedValue++
@@ -98,6 +98,7 @@ func main() {
 			case <-signals:
 				doneCh <- struct{}{}
 			}
+
 		}
 	}()
 
