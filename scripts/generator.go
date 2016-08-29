@@ -44,26 +44,14 @@ func main() {
 		log.Fatal(fmt.Errorf("err: goroutines should be less than element number"))
 	}
 
-	// Setup configuration
-	config := sarama.NewConfig()
-	// Return specifies what channels will be populated.
-	// If they are set to true, you must read from
-	// config.Producer.Return.Successes = true
-	// The total number of times to retry sending a message (default 3).
-	config.Producer.Retry.Max = 5
-
-	// The level of acknowledgement reliability needed from the broker.
-	config.Producer.RequiredAcks = sarama.WaitForAll
 	brokers := strings.Split(*address, ",")
 
-	producer, err := sarama.NewAsyncProducer(brokers, config)
-	if err != nil {
-		panic(err)
-	}
+	config := sarama.NewConfig()
+	producer := initProducer(config, brokers)
 
 	defer func() {
 		if err := producer.Close(); err != nil {
-			panic(err)
+			log.Fatal(err.Error())
 		}
 	}()
 
@@ -106,27 +94,12 @@ func main() {
 		}
 	}()
 
-	// CONSUMER GOES HERE
-
-	config.Consumer.Return.Errors = true
-
-	// Create new consumer
-	master, err := sarama.NewConsumer(brokers, config)
-	if err != nil {
-		panic(err)
-	}
-
+	master, consumer := initConsumer(config, brokers, *topic)
 	defer func() {
 		if err := master.Close(); err != nil {
-			panic(err)
+			log.Fatal(err.Error())
 		}
 	}()
-
-	// How to decide partition, is it fixed value...?
-	consumer, err := master.ConsumePartition(*topic, 0, sarama.OffsetNewest)
-	if err != nil {
-		panic(err)
-	}
 
 	var wg sync.WaitGroup
 	wg.Add(*goroutines)
@@ -172,4 +145,42 @@ func handleCtrlC(c chan os.Signal, cc chan struct{}) {
 	// handle ctrl+c event here
 	<-c
 	close(cc)
+}
+
+func initProducer(config *sarama.Config, brokers []string) sarama.AsyncProducer {
+	// Return specifies what channels will be populated.
+	// If they are set to true, you must read from
+	// config.Producer.Return.Successes = true
+	// The total number of times to retry sending a message (default 3).
+	config.Producer.Retry.Max = 5
+
+	// The level of acknowledgement reliability needed from the broker.
+	config.Producer.RequiredAcks = sarama.WaitForAll
+
+	producer, err := sarama.NewAsyncProducer(brokers, config)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	return producer
+}
+
+func initConsumer(config *sarama.Config, brokers []string, topic string) (sarama.Consumer, sarama.PartitionConsumer) {
+	// CONSUMER GOES HERE
+
+	config.Consumer.Return.Errors = true
+
+	// Create new consumer
+	master, err := sarama.NewConsumer(brokers, config)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	// How to decide partition, is it fixed value...?
+	consumer, err := master.ConsumePartition(topic, 0, sarama.OffsetNewest)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	return master, consumer
 }
