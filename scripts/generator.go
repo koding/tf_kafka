@@ -141,12 +141,14 @@ func consume(consumer sarama.PartitionConsumer, doneCh chan struct{}, wg *sync.W
 	}
 }
 
+// handle ctrl+c event here
+// when CTRL^C is triggered, it closes the channels
 func handleCtrlC(c chan os.Signal, cc chan struct{}) {
-	// handle ctrl+c event here
 	<-c
 	close(cc)
 }
 
+// initProducer gets the existing config, and then creates the producer
 func initProducer(config *sarama.Config, brokers []string) sarama.AsyncProducer {
 	// Return specifies what channels will be populated.
 	// If they are set to true, you must read from
@@ -165,9 +167,9 @@ func initProducer(config *sarama.Config, brokers []string) sarama.AsyncProducer 
 	return producer
 }
 
+// initConsumer gets existing config , then creates the consumer inside the function
 func initConsumer(config *sarama.Config, brokers []string, topic string) (sarama.Consumer, sarama.PartitionConsumer) {
 	// CONSUMER GOES HERE
-
 	config.Consumer.Return.Errors = true
 
 	// Create new consumer
@@ -176,7 +178,6 @@ func initConsumer(config *sarama.Config, brokers []string, topic string) (sarama
 		log.Fatal(err.Error())
 	}
 
-	// How to decide partition, is it fixed value...?
 	consumer, err := master.ConsumePartition(topic, 0, sarama.OffsetNewest)
 	if err != nil {
 		log.Fatal(err.Error())
