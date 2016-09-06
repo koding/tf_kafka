@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/bsm/sarama-cluster"
 )
 
 // channel variables
@@ -23,11 +23,6 @@ var (
 	msgCount                     int
 	producedValue, consumedValue int
 )
-
-func as() {
-	io.Copy()
-
-}
 
 // holds the flag variables
 var (
