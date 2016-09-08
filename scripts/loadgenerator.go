@@ -24,7 +24,7 @@ var (
 )
 
 var (
-	groupID = flag.String("group", "", "REQUIRED: The shared consumer group name")
+	groupID = flag.String("group", "may_group", "REQUIRED: The shared consumer group name")
 	// brokerList = flag.String("brokers", os.Getenv("KAFKA_PEERS"), "The comma separated list of brokers in the Kafka cluster")
 	// topicList  = flag.String("topics", "", "REQUIRED: The comma separated list of topics to consume")
 	offset  = flag.String("offset", "newest", "The offset to start with. Can be `oldest`, `newest`")
@@ -61,11 +61,6 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	// client, err := sarama.NewClient(brokers, &config.Config)
-	// if err != nil {
-	// 	log.Fatal(err.Error())
-	// }
-
 	producer, err := sarama.NewSyncProducerFromClient(client.Client)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -76,9 +71,7 @@ func main() {
 			time.Sleep(*interval / 10)
 			close(doneCh)
 		}()
-		fmt.Println("BURAYA1")
 		for i := 0; i < *element; i++ {
-			fmt.Println("BURAYA2")
 			strTime := strconv.Itoa(int(time.Now().Unix()))
 			val := fmt.Sprintf("Something Cool: %d", i)
 
@@ -91,13 +84,11 @@ func main() {
 			// use ticker as time.Sleep
 			<-time.Tick(*interval)
 
-			fmt.Println("BURAYA3")
-			if _, _, err := producer.SendMessage(msg); err != nil {
+			if _, _, err = producer.SendMessage(msg); err != nil {
 				log.Fatal(fmt.Errorf(err.Error()))
 			} else {
 				fmt.Println("Message Gonderildi:", msg)
 			}
-
 		}
 		if err := producer.Close(); err != nil {
 			log.Fatal(err.Error())
@@ -113,10 +104,15 @@ func main() {
 		printUsageErrorAndExit("-offset should be `oldest` or `newest`")
 	}
 
-	config.Consumer.Return.Errors = true
+	if *verbose {
+		sarama.Logger = logger
+	} else {
+		config.Consumer.Return.Errors = true
+		config.Group.Return.Notifications = true
+	}
 
-	// consumer, err := cluster.NewConsumer(brokers, *groupID, strings.Split(*topic, ","), config)
-	consumer, err := cluster.NewConsumerFromClient(client, *groupID, strings.Split(*topic, ","))
+	consumer, err := cluster.NewConsumer(brokers, *groupID, strings.Split(*topic, ","), config)
+	// consumer, err := cluster.NewConsumerFromClient(client, *groupID, strings.Split(*topic, ","))
 	if err != nil {
 		printErrorAndExit(69, "Failed to start consumer: %s", err)
 	}
