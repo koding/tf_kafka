@@ -8,16 +8,15 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"syscall"
+	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
-	"github.com/kr/pretty"
 )
 
 var (
-	doneCh                       = make(chan bool)
+	doneCh                       = make(chan struct{})
 	msgs                         = make(chan string)
 	msgCount                     int
 	producedValue, consumedValue int
@@ -25,8 +24,6 @@ var (
 
 var (
 	groupID = flag.String("group", "may_group", "REQUIRED: The shared consumer group name")
-	// brokerList = flag.String("brokers", os.Getenv("KAFKA_PEERS"), "The comma separated list of brokers in the Kafka cluster")
-	// topicList  = flag.String("topics", "", "REQUIRED: The comma separated list of topics to consume")
 	offset  = flag.String("offset", "newest", "The offset to start with. Can be `oldest`, `newest`")
 	verbose = flag.Bool("verbose", false, "Whether to turn on sarama logging")
 
@@ -40,6 +37,8 @@ var (
 	address    = flag.String("address", "localhost:9092", "addresses for kafka")
 	topic      = flag.String("topic", "defaultTopic", "topic name for kafka")
 )
+
+var mu = &sync.Mutex{}
 
 func main() {
 	flag.Parse()
@@ -66,6 +65,8 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
+	doneCh := make(chan struct{})
+
 	go func() {
 		defer func() {
 			time.Sleep(*interval / 10)
@@ -87,7 +88,7 @@ func main() {
 			if _, _, err = producer.SendMessage(msg); err != nil {
 				log.Fatal(fmt.Errorf(err.Error()))
 			} else {
-				fmt.Println("Message Gonderildi:", msg)
+				producedValue++
 			}
 		}
 		if err := producer.Close(); err != nil {
@@ -129,23 +130,81 @@ func main() {
 		}
 	}()
 
-	go func() {
-		for msg := range consumer.Messages() {
-			// fmt.Println("Message geldi", msg)
-			fmt.Printf("msg %# v", pretty.Formatter(msg))
-			fmt.Fprintf(os.Stdout, "%s/%d/%d\t%s\n", msg.Topic, msg.Partition, msg.Offset, msg.Value)
-			consumer.MarkOffset(msg, "")
-		}
-	}()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt)
 
-	wait := make(chan os.Signal)
-	signal.Notify(wait, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
-	<-wait
+	var wg sync.WaitGroup
+	wg.Add(*goroutines)
+
+	// warn to return all goroutines when Interrupt signal triggered
+	go handleCtrlC(signals, doneCh)
+	offset := &Offset{}
+	for index := 0; index < *goroutines; index++ {
+		go consume(consumer, doneCh, &wg, offset)
+	}
+
+	wg.Wait()
+
+	if producedValue == consumedValue {
+		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is finihed as successfully", producedValue, consumedValue))
+	} else {
+		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is failed", producedValue, consumedValue))
+	}
 
 	if err := consumer.Close(); err != nil {
 		logger.Println("Failed to close consumer: ", err)
 	}
+}
 
+type Offset struct {
+	min int64
+	max int64
+	mu  sync.Mutex
+}
+
+func (o *Offset) setMinAndMaxOffset(offset int64) (min, max int64) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if o.min == 0 && o.max == 0 {
+		o.min = offset
+		o.max = offset
+	}
+	if offset < o.min {
+		o.min = offset
+	}
+	if offset > max {
+		o.max = offset
+	}
+
+	return
+}
+
+func consume(consumer *cluster.Consumer, doneCh chan struct{}, wg *sync.WaitGroup, o *Offset) {
+	defer wg.Done()
+
+	for {
+		select {
+		case msg, ok := <-consumer.Messages():
+			if !ok {
+				return
+			}
+			// fmt.Println("Message reveied to :", msg)
+			consumer.MarkOffset(msg, "")
+			o.setMinAndMaxOffset(msg.Offset)
+			// use mutex here to prevent from race condition
+			mu.Lock()
+			consumedValue++
+			mu.Unlock()
+		case <-doneCh:
+			return
+		}
+	}
+}
+
+func handleCtrlC(c chan os.Signal, cc chan struct{}) {
+	<-c
+	close(cc)
 }
 
 func printUsageErrorAndExit(format string, values ...interface{}) {
