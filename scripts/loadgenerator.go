@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -91,7 +92,7 @@ func main() {
 				producedValue++
 			}
 		}
-		if err := producer.Close(); err != nil {
+		if err = producer.Close(); err != nil {
 			log.Fatal(err.Error())
 		}
 	}()
@@ -145,6 +146,15 @@ func main() {
 
 	wg.Wait()
 
+	count, err := offset.getTotalOffset()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	if producedValue == int(count) {
+		fmt.Println("produced value and total count is:", producedValue, count)
+	}
+
 	if producedValue == consumedValue {
 		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is finihed as successfully", producedValue, consumedValue))
 	} else {
@@ -157,25 +167,71 @@ func main() {
 }
 
 type Offset struct {
-	min int64
-	max int64
-	mu  sync.Mutex
+	count map[int32][]int64
+	// min   int64
+	// max   int64
+	mu sync.Mutex
 }
 
-func (o *Offset) setMinAndMaxOffset(offset int64) (min, max int64) {
-	mu.Lock()
-	defer mu.Unlock()
+func (o *Offset) setPartitionAndOffset(partition int32, offset int64) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 
-	if o.min == 0 && o.max == 0 {
-		o.min = offset
-		o.max = offset
+	if o.count == nil {
+		o.count = make(map[int32][]int64)
 	}
-	if offset < o.min {
-		o.min = offset
+
+	if _, ok := o.count[partition]; !ok {
+		// if we init array first time
+		// then we dont have another offset value to assign
+		o.count[partition] = make([]int64, 2)
+	}
+
+	o.setOffset(partition, offset)
+
+	return
+}
+
+var (
+	ErrNilOffsetCount = errors.New("offset count is nil")
+)
+
+func (o *Offset) getTotalOffset() (int64, error) {
+	var totalCount int64
+	if o.count == nil {
+		return 0, ErrNilOffsetCount
+	}
+	for _, v := range o.count {
+		totalCount += v[1] - v[0] + 1
+	}
+
+	return totalCount, nil
+}
+
+func (o *Offset) setOffset(partition int32, offset int64) {
+	v, ok := o.count[partition]
+	if !ok {
+		o.count[partition] = make([]int64, 2)
+	}
+
+	min, max := v[0], v[1]
+
+	if min == 0 && max == 0 {
+		min = offset
+		max = offset
+	}
+
+	if offset < min {
+		min = offset
 	}
 	if offset > max {
-		o.max = offset
+		max = offset
 	}
+
+	// update min and max value for offsets
+	v[0], v[1] = min, max
+	// set updated offset values into count map
+	o.count[partition] = v
 
 	return
 }
@@ -189,9 +245,9 @@ func consume(consumer *cluster.Consumer, doneCh chan struct{}, wg *sync.WaitGrou
 			if !ok {
 				return
 			}
-			// fmt.Println("Message reveied to :", msg)
+
 			consumer.MarkOffset(msg, "")
-			o.setMinAndMaxOffset(msg.Offset)
+			o.setPartitionAndOffset(msg.Partition, msg.Offset)
 			// use mutex here to prevent from race condition
 			mu.Lock()
 			consumedValue++
