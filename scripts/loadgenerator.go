@@ -19,24 +19,26 @@ import (
 var (
 	doneCh                       = make(chan struct{})
 	msgs                         = make(chan string)
-	msgCount                     int
 	producedValue, consumedValue int
 )
 
+// flag variables for kafka script
 var (
-	groupID = flag.String("group", "may_group", "REQUIRED: The shared consumer group name")
-	offset  = flag.String("offset", "newest", "The offset to start with. Can be `oldest`, `newest`")
-	verbose = flag.Bool("verbose", false, "Whether to turn on sarama logging")
-
-	logger = log.New(os.Stderr, "", log.LstdFlags)
-)
-
-var (
+	groupID    = flag.String("group", "may_group", "REQUIRED: The shared consumer group name")
+	offset     = flag.String("offset", "newest", "The offset to start with. Can be `oldest`, `newest`")
+	verbose    = flag.Bool("verbose", false, "Whether to turn on sarama logging")
 	element    = flag.Int("element", 10, "default message number")
 	interval   = flag.Duration("interval", 1*time.Second, "default duration to generate strings")
 	goroutines = flag.Int("goroutines", 2, "default go routines count")
 	address    = flag.String("address", "localhost:9092", "addresses for kafka")
 	topic      = flag.String("topic", "defaultTopic", "topic name for kafka")
+
+	logger = log.New(os.Stderr, "", log.LstdFlags)
+)
+
+// Error variables for kafka
+var (
+	ErrNilOffsetCount = errors.New("offset count is nil")
 )
 
 var mu = &sync.Mutex{}
@@ -166,13 +168,45 @@ func main() {
 	}
 }
 
+func consume(consumer *cluster.Consumer, doneCh chan struct{}, wg *sync.WaitGroup, o *Offset) {
+	defer wg.Done()
+
+	for {
+		select {
+		case msg, ok := <-consumer.Messages():
+			if !ok {
+				return
+			}
+
+			consumer.MarkOffset(msg, "")
+			o.setPartitionAndOffset(msg.Partition, msg.Offset)
+			// use mutex here to prevent from race condition
+			mu.Lock()
+			consumedValue++
+			mu.Unlock()
+		case <-doneCh:
+			return
+		}
+	}
+}
+
+// Offset holds the partition-offset data for kafka consumers
 type Offset struct {
+	// count holds the partition-offset values
+	// count[partition][]int64{minimum , maximum}
+	// e.g :
+	// assume that message's partition is 2 , minimum offset is 100 and maximum offset is 240
+	// then we will hold these data as
+	// count[2][]int64{100,240}
+	// first value of array is the minimum value of map
+	// second value of array is the maximum value of map
 	count map[int32][]int64
-	// min   int64
-	// max   int64
+
+	// mu is the mutex for consumer counting and set offsets operations
 	mu sync.Mutex
 }
 
+// setPartitionAndOffset sets the partition and the offset
 func (o *Offset) setPartitionAndOffset(partition int32, offset int64) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -192,10 +226,8 @@ func (o *Offset) setPartitionAndOffset(partition int32, offset int64) {
 	return
 }
 
-var (
-	ErrNilOffsetCount = errors.New("offset count is nil")
-)
-
+// getTotalOffset sums all of offsets for each partition
+// and return total number of operated offset
 func (o *Offset) getTotalOffset() (int64, error) {
 	var totalCount int64
 	if o.count == nil {
@@ -208,6 +240,7 @@ func (o *Offset) getTotalOffset() (int64, error) {
 	return totalCount, nil
 }
 
+// setOffset set the minumum and maximum offset according to partition of consumer
 func (o *Offset) setOffset(partition int32, offset int64) {
 	v, ok := o.count[partition]
 	if !ok {
@@ -236,28 +269,7 @@ func (o *Offset) setOffset(partition int32, offset int64) {
 	return
 }
 
-func consume(consumer *cluster.Consumer, doneCh chan struct{}, wg *sync.WaitGroup, o *Offset) {
-	defer wg.Done()
-
-	for {
-		select {
-		case msg, ok := <-consumer.Messages():
-			if !ok {
-				return
-			}
-
-			consumer.MarkOffset(msg, "")
-			o.setPartitionAndOffset(msg.Partition, msg.Offset)
-			// use mutex here to prevent from race condition
-			mu.Lock()
-			consumedValue++
-			mu.Unlock()
-		case <-doneCh:
-			return
-		}
-	}
-}
-
+// handleCtrlC handles the CTRL^ C keys and then closes the struct channel
 func handleCtrlC(c chan os.Signal, cc chan struct{}) {
 	<-c
 	close(cc)
