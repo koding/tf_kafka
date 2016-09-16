@@ -216,8 +216,6 @@ func (o *Offset) setPartitionAndOffset(partition int32, offset int64) {
 	}
 
 	if _, ok := o.count[partition]; !ok {
-		// if we init array first time
-		// then we dont have another offset value to assign
 		o.count[partition] = make([]int64, 2)
 	}
 
