@@ -154,13 +154,9 @@ func main() {
 	}
 
 	if producedValue == int(count) {
-		fmt.Println("produced value and total count is:", producedValue, count)
-	}
-
-	if producedValue == consumedValue {
-		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is finihed as successfully", producedValue, consumedValue))
+		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is finihed as successfully", producedValue, count))
 	} else {
-		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is failed", producedValue, consumedValue))
+		fmt.Println(fmt.Sprintf("producer:%d and consumer:%d checking is failed", producedValue, count))
 	}
 
 	if err := consumer.Close(); err != nil {
